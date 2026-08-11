@@ -1,6 +1,7 @@
 ﻿@inherits LayoutComponentBase
 @inject IJSRuntime JS
 @inject PlayerStateService PlayerState
+@inject IFavoritesService FavoritesService
 @inject NavigationManager Navigation
 @implements IDisposable
 
@@ -47,6 +48,9 @@
             <div class="player-info">
                 <div class="player-video-title">@PlayerState.CurrentVideo.Title</div>
                 <div class="player-channel">@PlayerState.CurrentVideo.ChannelName</div>
+                <button class="btn-secondary" @onclick="ToggleCurrentFavoriteAsync">
+                    @(IsCurrentFavorite ? "★ Nicht mehr merken" : "☆ Video merken")
+                </button>
             </div>
         </section>
 
@@ -70,6 +74,7 @@
 @code {
     private bool IsDark { get; set; }
     private bool IsLargeView { get; set; }
+    private bool IsCurrentFavorite { get; set; }
     private string CurrentPath { get; set; } = string.Empty;
     private bool IsPlayerVisible =>
         PlayerState.CurrentVideo is not null &&
@@ -80,6 +85,7 @@
         CurrentPath = GetCurrentPath();
         Navigation.LocationChanged += OnLocationChanged;
         PlayerState.Changed += OnPlayerStateChanged;
+        FavoritesService.Changed += OnFavoritesChanged;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -134,7 +140,31 @@
 
     private void OnPlayerStateChanged()
     {
-        _ = InvokeAsync(StateHasChanged);
+        IsCurrentFavorite = false;
+        _ = InvokeAsync(RefreshFavoriteStateAsync);
+    }
+
+    private void OnFavoritesChanged()
+    {
+        _ = InvokeAsync(RefreshFavoriteStateAsync);
+    }
+
+    private async Task RefreshFavoriteStateAsync()
+    {
+        IsCurrentFavorite = PlayerState.CurrentVideo is not null &&
+            await FavoritesService.ContainsAsync(PlayerState.CurrentVideo.VideoId);
+        StateHasChanged();
+    }
+
+    private async Task ToggleCurrentFavoriteAsync()
+    {
+        if (PlayerState.CurrentVideo is null)
+            return;
+
+        if (IsCurrentFavorite)
+            await FavoritesService.RemoveAsync(PlayerState.CurrentVideo.VideoId);
+        else
+            await FavoritesService.AddAsync(PlayerState.CurrentVideo);
     }
 
     private string GetCurrentPath()
@@ -152,5 +182,6 @@
     {
         Navigation.LocationChanged -= OnLocationChanged;
         PlayerState.Changed -= OnPlayerStateChanged;
+        FavoritesService.Changed -= OnFavoritesChanged;
     }
 }

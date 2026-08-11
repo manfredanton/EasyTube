@@ -9,6 +9,8 @@ namespace TwipDevEasyTube.Services
 		private const string StorageKey = "easytube_favorites";
 		private readonly IJSRuntime _js;
 
+		public event Action? Changed;
+
 		public FavoritesService(IJSRuntime js)
 		{
 			_js = js;
@@ -34,6 +36,7 @@ namespace TwipDevEasyTube.Services
 			videos.RemoveAll(item => item.VideoId == video.VideoId);
 			videos.Insert(0, video);
 			await SaveAsync(videos);
+			Changed?.Invoke();
 		}
 
 		public async Task RemoveAsync(string videoId)
@@ -41,6 +44,7 @@ namespace TwipDevEasyTube.Services
 			var videos = (await GetAllAsync()).ToList();
 			videos.RemoveAll(item => item.VideoId == videoId);
 			await SaveAsync(videos);
+			Changed?.Invoke();
 		}
 
 		private async Task SaveAsync(List<VideoItem> videos)
