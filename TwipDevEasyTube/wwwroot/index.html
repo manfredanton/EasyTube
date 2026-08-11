@@ -40,6 +40,18 @@
         }(window.location))
     </script>
 
+    <script>
+        // Blendet auf mobilen Geräten die Bildschirmtastatur aus
+        window.easyTube = {
+            blurActiveElement: function () {
+                var el = document.activeElement;
+                if (el && typeof el.blur === 'function') {
+                    el.blur();
+                }
+            }
+        };
+    </script>
+
     <script src="_framework/blazor.webassembly.js"></script>
     <script>
         if (window.location.hostname !== 'localhost') {

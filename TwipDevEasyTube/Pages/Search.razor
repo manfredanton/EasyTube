@@ -156,7 +156,7 @@ else
     {
         SearchText = suggestion;
         Suggestions = [];
-        await JS.InvokeVoidAsync("document.activeElement.blur");
+        await JS.BlurActiveElementAsync();
         await SearchAsync();
     }
 
@@ -165,7 +165,7 @@ else
         if (e.Key == "Enter")
         {
             Suggestions = [];
-            await JS.InvokeVoidAsync("document.activeElement.blur");
+            await JS.BlurActiveElementAsync();
             await SearchAsync();
         }
         else if (e.Key == "Escape")

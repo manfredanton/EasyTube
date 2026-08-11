@@ -203,7 +203,7 @@ else
     private async Task OnFilterKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
-            await JS.InvokeVoidAsync("document.activeElement.blur");
+            await JS.BlurActiveElementAsync();
     }
 
     private async Task DeleteEntryAsync(WatchHistoryEntry entry)
