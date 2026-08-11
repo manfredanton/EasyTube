@@ -8,7 +8,7 @@
 		public string ThumbnailUrl { get; set; } = string.Empty;
 		public DateTime WatchedAt { get; set; }
 
-		public string EmbedUrl => $"https://www.youtube.com/embed/{VideoId}?autoplay=1&rel=0&modestbranding=1";
+		public string EmbedUrl => $"https://www.youtube.com/embed/{VideoId}?autoplay=0&rel=0&modestbranding=1";
 		public string WatchedAtFormatted => WatchedAt.ToString("dd.MM.yyyy HH:mm");
 
 		public static WatchHistoryEntry FromVideoItem(VideoItem video) => new()

@@ -2,17 +2,26 @@
 @inject IJSRuntime JS
 
 <div class="app-container">
-    <nav class="tab-bar">
+    <nav class="tab-bar" aria-label="Hauptnavigation">
         <NavLink href="" Match="NavLinkMatch.All" ActiveClass="active">
             🔍 Suche
         </NavLink>
-        <button class="btn-theme" @onclick="ToggleTheme" title="Dark/Light Mode">
-            @(IsDark ? "☀️" : "🌙")
-        </button>
+        <NavLink href="favoriten" ActiveClass="active">
+            ⭐ Meine Videos
+        </NavLink>
         <NavLink href="verlauf" ActiveClass="active">
             🕐 Verlauf
-        </NavLink>        
+        </NavLink>
     </nav>
+
+    <div class="display-controls" aria-label="Darstellung">
+        <button class="btn-display" @onclick="ToggleLargeView" aria-pressed="@IsLargeView">
+            🔎 @(IsLargeView ? "Normale Schrift" : "Große Schrift")
+        </button>
+        <button class="btn-display" @onclick="ToggleTheme" aria-pressed="@IsDark">
+            @(IsDark ? "☀️ Helle Ansicht" : "🌙 Dunkle Ansicht")
+        </button>
+    </div>
 
     <main>
         @Body
@@ -23,6 +32,7 @@
 
 @code {
     private bool IsDark { get; set; }
+    private bool IsLargeView { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -30,9 +40,19 @@
         {
             var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "easytube_theme");
             IsDark = stored == "dark";
+            var storedView = await JS.InvokeAsync<string?>("localStorage.getItem", "easytube_large_view");
+            IsLargeView = storedView == "true";
             await ApplyTheme();
+            await ApplyLargeView();
             StateHasChanged();
         }
+    }
+
+    private async Task ToggleLargeView()
+    {
+        IsLargeView = !IsLargeView;
+        await JS.InvokeVoidAsync("localStorage.setItem", "easytube_large_view", IsLargeView.ToString().ToLowerInvariant());
+        await ApplyLargeView();
     }
 
     private async Task ToggleTheme()
@@ -48,5 +68,13 @@
             await JS.InvokeVoidAsync("document.body.classList.add", "dark");
         else
             await JS.InvokeVoidAsync("document.body.classList.remove", "dark");
+    }
+
+    private async Task ApplyLargeView()
+    {
+        if (IsLargeView)
+            await JS.InvokeVoidAsync("document.body.classList.add", "large-view");
+        else
+            await JS.InvokeVoidAsync("document.body.classList.remove", "large-view");
     }
 }

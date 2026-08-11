@@ -16,6 +16,7 @@ builder.Services.AddScoped(_ => new HttpClient
 // Services
 builder.Services.AddScoped<IYouTubeService, YouTubeService>();
 builder.Services.AddScoped<IHistoryService, HistoryService>();
+builder.Services.AddScoped<IFavoritesService, FavoritesService>();
 builder.Services.AddScoped<IRequestCounterService, RequestCounterService>();
 builder.Services.AddScoped<SearchStateService>();
 builder.Services.AddScoped<SearchHistoryService>();

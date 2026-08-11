@@ -50,8 +50,8 @@ namespace TwipDevEasyTube.Services
 				.Select(item => new VideoItem
 				{
 					VideoId = item.Id.VideoId,
-					Title = item.Snippet.Title,
-					ChannelName = item.Snippet.ChannelTitle,
+					Title = System.Net.WebUtility.HtmlDecode(item.Snippet.Title),
+					ChannelName = System.Net.WebUtility.HtmlDecode(item.Snippet.ChannelTitle),
 					ThumbnailUrl = item.Snippet.Thumbnails.Medium.Url
 				})
 				.ToList();

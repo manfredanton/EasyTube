@@ -2,33 +2,34 @@
 @inject IHistoryService HistoryService
 @inject SearchHistoryService SearchHistory;
 @inject IJSRuntime JS;
+@implements IDisposable
+
+<PageTitle>Verlauf – EasyTube</PageTitle>
 
 @if (CurrentVideo is not null)
 {
-    <!-- Player Ansicht -->
     <div class="player-header">
-        <button class="btn-back" @onclick="ClosePlayer">← Zurück</button>
-        <span class="player-title">@((MarkupString)CurrentVideo.Title)</span>
+        <button class="btn-back" @onclick="ClosePlayer">← Zurück zum Verlauf</button>
+        <span class="player-title">@CurrentVideo.Title</span>
     </div>
 
     <iframe class="player-embed"
+            title="@($"Video: {CurrentVideo.Title}")"
             src="@CurrentVideo.EmbedUrl"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-            allowfullscreen
-            webkit-playsinline
-            playsinline>
+            allowfullscreen>
     </iframe>
 
     <div class="player-info">
-        <div class="player-video-title">@((MarkupString)CurrentVideo.Title)</div>
-        <div class="player-channel">@((MarkupString)CurrentVideo.ChannelName)</div>
+        <div class="player-video-title">@CurrentVideo.Title</div>
+        <div class="player-channel">@CurrentVideo.ChannelName</div>
     </div>
 }
 else
 {
     <div class="history-header">
-        <button class="btn-theme" @onclick="OpenSearchHistory" title="Suchverlauf">⚙️</button>
-        <span class="history-title">Zuletzt angesehen</span>
+        <button class="btn-display" @onclick="OpenSearchHistory">🧹 Suchbegriffe</button>
+        <h1 class="history-title">Zuletzt angesehen</h1>
         @if (Entries.Count > 0)
         {
             <button class="btn-clear" @onclick="ClearAllAsync">Alles löschen</button>
@@ -40,6 +41,7 @@ else
         <div style="padding: 10px 16px; background: var(--bg-white);">
             <div class="autocomplete-wrapper">
                 <input class="search-input"
+                       aria-label="Im Verlauf suchen"
                        type="search"
                        placeholder="Im Verlauf suchen..."
                        value="@FilterText"
@@ -50,31 +52,31 @@ else
 
                 @if (!string.IsNullOrEmpty(FilterText))
                 {
-                    <button class="input-filterclear" @onclick="ClearFilterSearch">✕</button>
+                    <button class="input-filterclear" @onclick="ClearFilterSearch" aria-label="Verlaufssuche leeren">✕</button>
                 }
             </div>
         </div>
     }
     @if (ShowConfirmDialog)
     {
-        <div class="dialog-overlay">
-            <div class="dialog-box">
-                <div class="dialog-icon">🗑️</div>
-                <div class="dialog-title">Verlauf löschen</div>
+        <div class="dialog-overlay" @onkeydown="OnDialogKeyDown">
+            <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="clear-dialog-title" tabindex="-1">
+                <div class="dialog-icon" aria-hidden="true">🗑️</div>
+                <div class="dialog-title" id="clear-dialog-title">Verlauf löschen</div>
                 <div class="dialog-message">Möchtest du deinen gesamten Verlauf löschen?</div>
                 <div class="dialog-buttons">
+                    <button class="btn-cancel" autofocus @onclick="() => ShowConfirmDialog = false">Abbrechen</button>
                     <button class="btn-confirm" @onclick="ConfirmClear">Ja, löschen</button>
-                    <button class="btn-cancel" @onclick="() => ShowConfirmDialog = false">Abbrechen</button>
                 </div>
             </div>
         </div>
     }
     @if (ShowSearchHistoryDialog)
     {
-        <div class="dialog-overlay">
-            <div class="dialog-box dialog-search-history">
-                <div class="dialog-icon">⚙️</div>
-                <div class="dialog-title">Suchverlauf bereinigen</div>
+        <div class="dialog-overlay" @onkeydown="OnDialogKeyDown">
+            <div class="dialog-box dialog-search-history" role="dialog" aria-modal="true" aria-labelledby="search-history-title" tabindex="-1">
+                <div class="dialog-icon" aria-hidden="true">🧹</div>
+                <div class="dialog-title" id="search-history-title">Gespeicherte Suchbegriffe</div>
                 @if (SearchTerms.Count == 0)
                 {
                     <div class="dialog-message">Noch keine Suchbegriffe gespeichert.</div>
@@ -86,7 +88,7 @@ else
                         {
                             <div class="dialog-search-history-item">
                                 <span>@term</span>
-                                <button class="btn-delete" @onclick="() => DeleteSearchTermAsync(term)">✕</button>
+                                <button class="btn-delete" aria-label="@($"Suchbegriff „{term}“ löschen")" @onclick="() => DeleteSearchTermAsync(term)">✕</button>
                             </div>
                         }
                     </div>
@@ -103,15 +105,15 @@ else
     }
     @if (IsLoading)
     {
-        <div class="spinner-box">
-            <div class="spinner"></div>
-            <span style="color: var(--text-secondary)">Wird geladen...</span>
+        <div class="spinner-box" role="status" aria-live="polite">
+            <div class="spinner" aria-hidden="true"></div>
+            <span>Wird geladen...</span>
         </div>
     }
     else if (Entries.Count == 0)
     {
         <div class="state-box">
-            <div class="state-icon">🕐</div>
+            <div class="state-icon" aria-hidden="true">🕐</div>
             <div class="state-title">Noch nichts angesehen.</div>
             <div class="state-subtitle">Videos die du abgespielt hast, erscheinen hier.</div>
         </div>
@@ -121,25 +123,31 @@ else
         <div class="video-list">
             @foreach (var entry in FilteredEntries)
             {
-                <div class="video-card">
-                    <div class="video-card-row">
-                        <img class="video-thumbnail"
-                             src="@entry.ThumbnailUrl"
-                             alt="@entry.Title"
-                             @onclick="() => OpenVideo(entry)" />
-
-                        <div class="video-info" @onclick="() => OpenVideo(entry)" style="cursor:pointer; flex:1">
-                            <div class="video-title">@((MarkupString)entry.Title)</div>
-                            <div class="video-channel">@((MarkupString)entry.ChannelName)</div>
-                            <div class="video-date">@entry.WatchedAtFormatted</div>
-                        </div>
-
-                        <button class="btn-delete" @onclick="() => DeleteEntryAsync(entry)">✕</button>
-                    </div>
-                </div>
+                <article class="video-card">
+                    <button class="video-open" @onclick="() => OpenVideo(entry)" aria-label="@($"Video erneut abspielen: {entry.Title}")">
+                        <img class="video-thumbnail" src="@entry.ThumbnailUrl" alt="" />
+                        <span class="video-info">
+                            <span class="video-title">@entry.Title</span>
+                            <span class="video-channel">@entry.ChannelName</span>
+                            <span class="video-date">@entry.WatchedAtFormatted</span>
+                        </span>
+                    </button>
+                    <button class="btn-card-action" @onclick="() => DeleteEntryAsync(entry)">🗑️ Entfernen</button>
+                </article>
             }
         </div>
     }
+}
+
+@if (!string.IsNullOrEmpty(StatusMessage))
+{
+    <div class="snackbar" role="status" aria-live="polite">
+        <span>@StatusMessage</span>
+        @if (CanUndo)
+        {
+            <button @onclick="UndoAsync">Rückgängig</button>
+        }
+    </div>
 }
 
 @code {
@@ -151,6 +159,10 @@ else
     private List<string> SearchTerms { get; set; } = [];
 
     private string FilterText { get; set; } = string.Empty;
+    private WatchHistoryEntry? LastDeletedEntry { get; set; }
+    private List<WatchHistoryEntry> LastClearedEntries { get; set; } = [];
+    private string StatusMessage { get; set; } = string.Empty;
+    private bool CanUndo => LastDeletedEntry is not null || LastClearedEntries.Count > 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -208,8 +220,11 @@ else
 
     private async Task DeleteEntryAsync(WatchHistoryEntry entry)
     {
+        LastDeletedEntry = entry;
+        LastClearedEntries = [];
         await HistoryService.RemoveAsync(entry.VideoId);
         await LoadAsync();
+        ShowStatus("Video wurde aus dem Verlauf entfernt.");
     }
 
     private bool ShowConfirmDialog { get; set; }
@@ -222,8 +237,11 @@ else
     private async Task ConfirmClear()
     {
         ShowConfirmDialog = false;
+        LastClearedEntries = Entries.ToList();
+        LastDeletedEntry = null;
         await HistoryService.ClearAllAsync();
         await LoadAsync();
+        ShowStatus("Der Verlauf wurde gelöscht.");
     }
 
     private async Task OpenSearchHistory()
@@ -247,5 +265,68 @@ else
     private void ClearFilterSearch()
     {
         FilterText = string.Empty;
+    }
+
+    private async Task UndoAsync()
+    {
+        if (LastDeletedEntry is not null)
+        {
+            await HistoryService.AddAsync(LastDeletedEntry);
+            LastDeletedEntry = null;
+        }
+        else if (LastClearedEntries.Count > 0)
+        {
+            foreach (var entry in LastClearedEntries.AsEnumerable().Reverse())
+                await HistoryService.AddAsync(entry);
+
+            LastClearedEntries = [];
+        }
+
+        await LoadAsync();
+        ShowStatus("Der Verlauf wurde wiederhergestellt.", allowUndo: false);
+    }
+
+    private void OnDialogKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Escape")
+            return;
+
+        ShowConfirmDialog = false;
+        ShowSearchHistoryDialog = false;
+    }
+
+    private CancellationTokenSource? StatusCancellation { get; set; }
+
+    private void ShowStatus(string message, bool allowUndo = true)
+    {
+        StatusCancellation?.Cancel();
+        StatusCancellation?.Dispose();
+        StatusCancellation = new CancellationTokenSource();
+        StatusMessage = message;
+        _ = ClearStatusAfterDelayAsync(StatusCancellation.Token, allowUndo);
+    }
+
+    private async Task ClearStatusAfterDelayAsync(CancellationToken cancellationToken, bool allowUndo)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(8), cancellationToken);
+            StatusMessage = string.Empty;
+            if (allowUndo)
+            {
+                LastDeletedEntry = null;
+                LastClearedEntries = [];
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        StatusCancellation?.Cancel();
+        StatusCancellation?.Dispose();
     }
 }
