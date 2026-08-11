@@ -1,0 +1,65 @@
+# Automatische Veroeffentlichung von EasyTube auf GitHub Pages.
+# Laeuft, sobald der Tag "live" gesetzt/verschoben und gepusht wird.
+# Ergebnis-URL: https://manfredanton.github.io/EasyTube/
+
+name: Deploy live to GitHub Pages
+
+on:
+  push:
+    tags:
+      - 'live'          # feuert, wenn du den Tag "live" pushst
+  workflow_dispatch:     # erlaubt zusaetzlich den manuellen Start-Knopf in GitHub
+
+# Rechte, die der Roboter zum Veroeffentlichen auf Pages braucht
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Nur eine Veroeffentlichung gleichzeitig
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  # 1) Bauen
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: .NET 9 einrichten
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: App bauen (Release)
+        run: dotnet publish TwipDevEasyTube/TwipDevEasyTube.csproj -c Release -o publish
+
+      - name: base href auf /EasyTube/ setzen
+        run: |
+          sed -i 's|<base href="/" />|<base href="/EasyTube/" />|' publish/wwwroot/index.html
+
+      - name: SPA-Fallback (404.html) erzeugen
+        run: cp publish/wwwroot/index.html publish/wwwroot/404.html
+
+      - name: .nojekyll anlegen (wichtig fuer Blazor-Ordner wie _framework)
+        run: touch publish/wwwroot/.nojekyll
+
+      - name: Ergebnis als Pages-Artefakt hochladen
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: publish/wwwroot
+
+  # 2) Veroeffentlichen
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Auf GitHub Pages veroeffentlichen
+        id: deployment
+        uses: actions/deploy-pages@v4
