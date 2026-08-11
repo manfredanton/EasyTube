@@ -43,16 +43,6 @@
                 }
             </div>
 
-            @if (SpeechSupported)
-            {
-                <button class="btn-voice"
-                        @onclick="StartVoiceSearchAsync"
-                        disabled="@IsListening"
-                        aria-label="Suche über Spracheingabe starten">
-                    🎤 <span>@(IsListening ? "Ich höre zu..." : "Sprechen")</span>
-                </button>
-            }
-
             <button class="btn-primary"
                     @onclick="SearchAsync"
                     disabled="@(IsLoading || string.IsNullOrWhiteSpace(SearchText))">
@@ -137,8 +127,6 @@
     private List<string> Suggestions { get; set; } = [];
     private HashSet<string> FavoriteIds { get; set; } = [];
     private int VisibleResultCount { get; set; } = ResultsPerPage;
-    private bool SpeechSupported { get; set; }
-    private bool IsListening { get; set; }
     private string StatusMessage { get; set; } = string.Empty;
 
     private IEnumerable<VideoItem> VisibleResults => Results.Take(VisibleResultCount);
@@ -163,15 +151,6 @@
         {
             SearchText = SearchState.LastSearchText;
             Results = SearchState.LastResults;
-        }
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            SpeechSupported = await JS.InvokeAsync<bool>("easyTube.supportsSpeechRecognition");
-            StateHasChanged();
         }
     }
 
@@ -284,28 +263,6 @@
             await FavoritesService.AddAsync(video);
             FavoriteIds.Add(video.VideoId);
             StatusMessage = "Video wurde unter „Meine Videos“ gespeichert.";
-        }
-    }
-
-    private async Task StartVoiceSearchAsync()
-    {
-        IsListening = true;
-        StatusMessage = "Bitte sprich jetzt deinen Suchbegriff.";
-
-        try
-        {
-            var spokenText = await JS.InvokeAsync<string>("easyTube.startVoiceSearch");
-            SearchText = spokenText;
-            StatusMessage = $"Gesucht wird nach: {spokenText}";
-            await SearchAsync();
-        }
-        catch (JSException)
-        {
-            StatusMessage = "Die Spracheingabe hat nicht funktioniert. Bitte versuche es erneut.";
-        }
-        finally
-        {
-            IsListening = false;
         }
     }
 

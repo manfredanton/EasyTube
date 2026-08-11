@@ -54,33 +54,6 @@
                 if (element) {
                     element.scrollIntoView({ behavior: "smooth", block: "start" });
                 }
-            },
-            supportsSpeechRecognition: function () {
-                return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
-            },
-            startVoiceSearch: function () {
-                return new Promise(function (resolve, reject) {
-                    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                    if (!SpeechRecognition) {
-                        reject(new Error("Spracherkennung wird von diesem Browser nicht unterstützt."));
-                        return;
-                    }
-
-                    var recognition = new SpeechRecognition();
-                    recognition.lang = "de-DE";
-                    recognition.interimResults = false;
-                    recognition.maxAlternatives = 1;
-                    recognition.onresult = function (event) {
-                        resolve(event.results[0][0].transcript);
-                    };
-                    recognition.onerror = function () {
-                        reject(new Error("Die Spracheingabe konnte nicht verstanden werden."));
-                    };
-                    recognition.onnomatch = function () {
-                        reject(new Error("Die Spracheingabe konnte nicht verstanden werden."));
-                    };
-                    recognition.start();
-                });
             }
         };
     </script>
