@@ -2,40 +2,23 @@
 @inject IYouTubeService YouTubeService
 @inject IRequestCounterService RequestCounter
 @inject IHistoryService HistoryService
+@inject IFavoritesService FavoritesService
 @inject SearchStateService SearchState
 @inject SearchHistoryService SearchHistory
 @inject IJSRuntime JS
+@inject PlayerStateService PlayerState
+@inject NavigationManager Navigation
 
-@if (CurrentVideo is not null)
-{
-    <!-- Player Ansicht -->
-    <div class="player-header">
-        <button class="btn-back" @onclick="ClosePlayer">← Zurück</button>
-        <span class="player-title">@((MarkupString)CurrentVideo.Title)</span>
-    </div>
+<PageTitle>Videos suchen – EasyTube</PageTitle>
 
-    <iframe class="player-embed"
-            src="@CurrentVideo.EmbedUrl"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-            allowfullscreen
-            webkit-playsinline
-            playsinline>
-    </iframe>
-
-    <div class="player-info">
-        <div class="player-video-title">@((MarkupString)CurrentVideo.Title)</div>
-        <div class="player-channel">@((MarkupString)CurrentVideo.ChannelName)</div>
-    </div>
-}
-else
-{
-    <!-- Suche Ansicht -->
-    <div class="search-header">
-        <div class="app-title">🎬 EasyTube</div>
+<div class="search-header">
+        <h1 class="app-title">🎬 EasyTube</h1>
 
         <div class="search-row">
             <div class="autocomplete-wrapper">
+                <label class="visually-hidden" for="video-search">Videos suchen</label>
                 <input class="search-input"
+                       id="video-search"
                        type="search"
                        placeholder="Was möchtest du ansehen?"
                        value="@SearchText"
@@ -45,16 +28,16 @@ else
 
                 @if (!string.IsNullOrEmpty(SearchText))
                 {
-                    <button class="input-clear" @onclick="ClearSearch">✕</button>
-                }                       
+                    <button class="input-clear" @onclick="ClearSearch" aria-label="Suchfeld leeren">✕</button>
+                }
                 @if (Suggestions.Count > 0)
                 {
-                    <div class="autocomplete-dropdown">
+                    <div class="autocomplete-dropdown" role="listbox" aria-label="Frühere Suchbegriffe">
                         @foreach (var suggestion in Suggestions)
                         {
-                            <div class="autocomplete-item" @onclick="() => SelectSuggestion(suggestion)">
+                            <button class="autocomplete-item" role="option" @onclick="() => SelectSuggestion(suggestion)">
                                 🕐 @suggestion
-                            </div>
+                            </button>
                         }
                     </div>
                 }
@@ -67,29 +50,33 @@ else
             </button>
         </div>
 
-        <div class="request-counter" style="color: @CounterColor">
-            @CounterText
-        </div>
+        @if (RemainingSearches <= 10)
+        {
+            <div class="request-counter" style="color: @CounterColor">
+                Heute sind noch @RemainingSearches neue Suchen möglich.
+            </div>
+        }
     </div>
 
     @if (IsLoading)
     {
-        <div class="spinner-box">
-            <div class="spinner"></div>
-            <span style="color: var(--text-secondary)">Wird gesucht...</span>
+        <div class="spinner-box" role="status" aria-live="polite">
+            <div class="spinner" aria-hidden="true"></div>
+            <span>Wird gesucht...</span>
         </div>
     }
     else if (HasError)
     {
-        <div class="state-box">
-            <div class="state-icon">⚠️</div>
+        <div class="state-box" role="alert">
+            <div class="state-icon" aria-hidden="true">⚠️</div>
             <div class="state-title">@ErrorMessage</div>
+            <button class="btn-secondary" @onclick="SearchAsync">Noch einmal versuchen</button>
         </div>
     }
     else if (HasNoResults)
     {
         <div class="state-box">
-            <div class="state-icon">🔍</div>
+            <div class="state-icon" aria-hidden="true">🔍</div>
             <div class="state-title">Nichts gefunden.</div>
             <div class="state-subtitle">Versuche einen anderen Suchbegriff.</div>
         </div>
@@ -97,32 +84,53 @@ else
     else
     {
         <div class="video-list">
-            @foreach (var video in Results)
+            @foreach (var video in VisibleResults)
             {
-                <div class="video-card" @onclick="() => OpenVideo(video)">
-                    <img class="video-thumbnail" src="@video.ThumbnailUrl" alt="@video.Title" />
-                    <div class="video-info">
-                        <div class="video-title">@((MarkupString)video.Title)</div>
-                        <div class="video-channel">@((MarkupString)video.ChannelName)</div>
-                    </div>
-                </div>
+                <article class="video-card">
+                    <button class="video-open" @onclick="() => OpenVideo(video)" aria-label="@($"Video abspielen: {video.Title}")">
+                        <img class="video-thumbnail" src="@video.ThumbnailUrl" alt="" />
+                        <span class="video-info">
+                            <span class="video-title">@video.Title</span>
+                            <span class="video-channel">@video.ChannelName</span>
+                        </span>
+                    </button>
+                    <button class="btn-card-action" @onclick="() => ToggleFavoriteAsync(video)">
+                        @(FavoriteIds.Contains(video.VideoId) ? "★ Gemerkt" : "☆ Merken")
+                    </button>
+                </article>
+            }
+
+            @if (VisibleResultCount < Results.Count)
+            {
+                <button class="btn-load-more" @onclick="ShowMoreResults">
+                    Weitere Videos anzeigen
+                </button>
             }
         </div>
     }
+
+@if (!string.IsNullOrEmpty(StatusMessage))
+{
+    <div class="snackbar" role="status" aria-live="polite">
+        <span>@StatusMessage</span>
+    </div>
 }
 
 @code {
+    private const int ResultsPerPage = 12;
     private string SearchText { get; set; } = string.Empty;
     private bool IsLoading { get; set; }
     private bool HasError { get; set; }
     private bool HasNoResults { get; set; }
     private string ErrorMessage { get; set; } = string.Empty;
     private List<VideoItem> Results { get; set; } = [];
-    private VideoItem? CurrentVideo { get; set; }
     private List<string> Suggestions { get; set; } = [];
+    private HashSet<string> FavoriteIds { get; set; } = [];
+    private int VisibleResultCount { get; set; } = ResultsPerPage;
+    private string StatusMessage { get; set; } = string.Empty;
 
-    private string CounterText =>
-        $"{RequestCounter.TodayCount} von {RequestCounter.DailyLimit} Suchen heute verwendet";
+    private IEnumerable<VideoItem> VisibleResults => Results.Take(VisibleResultCount);
+    private int RemainingSearches => Math.Max(0, RequestCounter.DailyLimit - RequestCounter.TodayCount);
 
     private string CounterColor => RequestCounter.TodayCount switch
     {
@@ -134,6 +142,9 @@ else
     protected override async Task OnInitializedAsync()
     {
         await RequestCounter.LoadAsync();
+        FavoriteIds = (await FavoritesService.GetAllAsync())
+            .Select(video => video.VideoId)
+            .ToHashSet();
 
         // Letzte Suche wiederherstellen
         if (SearchState.LastResults.Count > 0)
@@ -185,6 +196,7 @@ else
         ErrorMessage = string.Empty;
         Results = [];
         Suggestions = [];
+        VisibleResultCount = ResultsPerPage;
 
         try
         {
@@ -208,17 +220,22 @@ else
         catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
         {
             HasError = true;
-            ErrorMessage = "API-Zugriff verweigert. Bitte den API Key prüfen.";
+            ErrorMessage = "Die Videosuche ist gerade nicht verfügbar. Bitte später erneut versuchen.";
         }
         catch (HttpRequestException)
         {
             HasError = true;
             ErrorMessage = "Keine Internetverbindung. Bitte WLAN prüfen.";
         }
-        catch
+        catch (TaskCanceledException)
         {
             HasError = true;
-            ErrorMessage = "Ein Fehler ist aufgetreten. Bitte erneut versuchen.";
+            ErrorMessage = "Die Suche dauert zu lange. Bitte versuche es erneut.";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            HasError = true;
+            ErrorMessage = "Die Suchergebnisse konnten nicht geladen werden. Bitte versuche es erneut.";
         }
         finally
         {
@@ -228,9 +245,30 @@ else
 
     private async Task OpenVideo(VideoItem video)
     {
-        CurrentVideo = video;
+        PlayerState.Play(video, Navigation.ToBaseRelativePath(Navigation.Uri));
         var entry = WatchHistoryEntry.FromVideoItem(video);
         await HistoryService.AddAsync(entry);
+    }
+
+    private async Task ToggleFavoriteAsync(VideoItem video)
+    {
+        if (FavoriteIds.Contains(video.VideoId))
+        {
+            await FavoritesService.RemoveAsync(video.VideoId);
+            FavoriteIds.Remove(video.VideoId);
+            StatusMessage = "Video wurde aus „Meine Videos“ entfernt.";
+        }
+        else
+        {
+            await FavoritesService.AddAsync(video);
+            FavoriteIds.Add(video.VideoId);
+            StatusMessage = "Video wurde unter „Meine Videos“ gespeichert.";
+        }
+    }
+
+    private void ShowMoreResults()
+    {
+        VisibleResultCount = Math.Min(VisibleResultCount + ResultsPerPage, Results.Count);
     }
 
     private void ClearSearch()
@@ -239,8 +277,4 @@ else
         Suggestions = [];
     }
 
-    private void ClosePlayer()
-    {
-        CurrentVideo = null;
-    }
 }

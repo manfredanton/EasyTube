@@ -1,0 +1,135 @@
+@page "/favoriten"
+@inject IFavoritesService FavoritesService
+@inject IHistoryService HistoryService
+@inject PlayerStateService PlayerState
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Meine Videos – EasyTube</PageTitle>
+
+<header class="section-header">
+        <h1 class="history-title">⭐ Meine Videos</h1>
+        <p>Hier findest du deine gemerkten Lieblingsvideos.</p>
+    </header>
+
+    @if (IsLoading)
+    {
+        <div class="spinner-box" role="status" aria-live="polite">
+            <div class="spinner" aria-hidden="true"></div>
+            <span>Wird geladen...</span>
+        </div>
+    }
+    else if (Videos.Count == 0)
+    {
+        <div class="state-box">
+            <div class="state-icon" aria-hidden="true">⭐</div>
+            <div class="state-title">Noch keine Videos gemerkt.</div>
+            <div class="state-subtitle">Tippe bei einem Suchergebnis auf „Merken“.</div>
+        </div>
+    }
+    else
+    {
+        <div class="video-list">
+            @foreach (var video in Videos)
+            {
+                <article class="video-card">
+                    <button class="video-open" @onclick="() => OpenVideo(video)" aria-label="@($"Video abspielen: {video.Title}")">
+                        <img class="video-thumbnail" src="@video.ThumbnailUrl" alt="" />
+                        <span class="video-info">
+                            <span class="video-title">@video.Title</span>
+                            <span class="video-channel">@video.ChannelName</span>
+                        </span>
+                    </button>
+                    <button class="btn-card-action" @onclick="() => RemoveAsync(video)">
+                        🗑️ Entfernen
+                    </button>
+                </article>
+            }
+        </div>
+    }
+
+@if (!string.IsNullOrEmpty(StatusMessage))
+{
+    <div class="snackbar" role="status" aria-live="polite">
+        <span>@StatusMessage</span>
+        @if (LastRemoved is not null)
+        {
+            <button @onclick="UndoRemoveAsync">Rückgängig</button>
+        }
+    </div>
+}
+
+@code {
+    private List<VideoItem> Videos { get; set; } = [];
+    private VideoItem? LastRemoved { get; set; }
+    private bool IsLoading { get; set; } = true;
+    private string StatusMessage { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        Videos = (await FavoritesService.GetAllAsync()).ToList();
+        IsLoading = false;
+    }
+
+    private async Task OpenVideo(VideoItem video)
+    {
+        PlayerState.Play(video, Navigation.ToBaseRelativePath(Navigation.Uri));
+        await HistoryService.AddAsync(WatchHistoryEntry.FromVideoItem(video));
+    }
+
+    private async Task RemoveAsync(VideoItem video)
+    {
+        LastRemoved = video;
+        await FavoritesService.RemoveAsync(video.VideoId);
+        await LoadAsync();
+        ShowStatus("Video wurde aus „Meine Videos“ entfernt.");
+    }
+
+    private async Task UndoRemoveAsync()
+    {
+        if (LastRemoved is null)
+            return;
+
+        await FavoritesService.AddAsync(LastRemoved);
+        LastRemoved = null;
+        await LoadAsync();
+        ShowStatus("Video wurde wiederhergestellt.", allowUndo: false);
+    }
+
+    private CancellationTokenSource? StatusCancellation { get; set; }
+
+    private void ShowStatus(string message, bool allowUndo = true)
+    {
+        StatusCancellation?.Cancel();
+        StatusCancellation?.Dispose();
+        StatusCancellation = new CancellationTokenSource();
+        StatusMessage = message;
+        _ = ClearStatusAfterDelayAsync(StatusCancellation.Token, allowUndo);
+    }
+
+    private async Task ClearStatusAfterDelayAsync(CancellationToken cancellationToken, bool allowUndo)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(8), cancellationToken);
+            StatusMessage = string.Empty;
+            if (allowUndo)
+                LastRemoved = null;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        StatusCancellation?.Cancel();
+        StatusCancellation?.Dispose();
+    }
+}

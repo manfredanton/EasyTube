@@ -1,18 +1,69 @@
 ﻿@inherits LayoutComponentBase
 @inject IJSRuntime JS
+@inject PlayerStateService PlayerState
+@inject IFavoritesService FavoritesService
+@inject NavigationManager Navigation
+@implements IDisposable
 
 <div class="app-container">
-    <nav class="tab-bar">
+    <nav class="tab-bar" aria-label="Hauptnavigation">
         <NavLink href="" Match="NavLinkMatch.All" ActiveClass="active">
             🔍 Suche
         </NavLink>
-        <button class="btn-theme" @onclick="ToggleTheme" title="Dark/Light Mode">
-            @(IsDark ? "☀️" : "🌙")
-        </button>
+        <NavLink href="favoriten" ActiveClass="active">
+            ⭐ Meine Videos
+        </NavLink>
         <NavLink href="verlauf" ActiveClass="active">
             🕐 Verlauf
-        </NavLink>        
+        </NavLink>
     </nav>
+
+    <div class="display-controls" aria-label="Darstellung">
+        <button class="btn-display" @onclick="ToggleLargeView" aria-pressed="@IsLargeView">
+            🔎 @(IsLargeView ? "Normale Schrift" : "Große Schrift")
+        </button>
+        <button class="btn-display" @onclick="ToggleTheme" aria-pressed="@IsDark">
+            @(IsDark ? "☀️ Helle Ansicht" : "🌙 Dunkle Ansicht")
+        </button>
+    </div>
+
+    @if (PlayerState.CurrentVideo is not null)
+    {
+        <section id="persistent-player"
+                 class="persistent-player @(IsPlayerVisible ? null : "persistent-player-hidden")"
+                 aria-hidden="@(!IsPlayerVisible)">
+            <div class="player-header">
+                <button class="btn-back" @onclick="PlayerState.Stop">■ Video beenden</button>
+                <span class="player-title">@PlayerState.CurrentVideo.Title</span>
+            </div>
+
+            <iframe @key="PlayerState.CurrentVideo.VideoId"
+                    class="player-embed"
+                    title="@($"Video: {PlayerState.CurrentVideo.Title}")"
+                    src="@PlayerState.CurrentVideo.EmbedUrl"
+                    tabindex="@(IsPlayerVisible ? "0" : "-1")"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                    allowfullscreen>
+            </iframe>
+
+            <div class="player-info">
+                <div class="player-video-title">@PlayerState.CurrentVideo.Title</div>
+                <div class="player-channel">@PlayerState.CurrentVideo.ChannelName</div>
+                <button class="btn-secondary" @onclick="ToggleCurrentFavoriteAsync">
+                    @(IsCurrentFavorite ? "★ Nicht mehr merken" : "☆ Video merken")
+                </button>
+            </div>
+        </section>
+
+        @if (!IsPlayerVisible)
+        {
+            <div class="background-player-notice" role="status">
+                <span>▶ Das Video läuft im Hintergrund weiter.</span>
+                <button @onclick="ReturnToVideo">Zum Video</button>
+                <button @onclick="PlayerState.Stop">Beenden</button>
+            </div>
+        }
+    }
 
     <main>
         @Body
@@ -23,6 +74,21 @@
 
 @code {
     private bool IsDark { get; set; }
+    private bool IsLargeView { get; set; }
+    private bool IsCurrentFavorite { get; set; }
+    private bool ShouldScrollToPlayer { get; set; }
+    private string CurrentPath { get; set; } = string.Empty;
+    private bool IsPlayerVisible =>
+        PlayerState.CurrentVideo is not null &&
+        CurrentPath == PlayerState.OriginPath;
+
+    protected override void OnInitialized()
+    {
+        CurrentPath = GetCurrentPath();
+        Navigation.LocationChanged += OnLocationChanged;
+        PlayerState.Changed += OnPlayerStateChanged;
+        FavoritesService.Changed += OnFavoritesChanged;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -30,9 +96,25 @@
         {
             var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "easytube_theme");
             IsDark = stored == "dark";
+            var storedView = await JS.InvokeAsync<string?>("localStorage.getItem", "easytube_large_view");
+            IsLargeView = storedView == "true";
             await ApplyTheme();
+            await ApplyLargeView();
             StateHasChanged();
         }
+
+        if (ShouldScrollToPlayer && IsPlayerVisible)
+        {
+            ShouldScrollToPlayer = false;
+            await JS.InvokeVoidAsync("easyTube.scrollToElement", "persistent-player");
+        }
+    }
+
+    private async Task ToggleLargeView()
+    {
+        IsLargeView = !IsLargeView;
+        await JS.InvokeVoidAsync("localStorage.setItem", "easytube_large_view", IsLargeView.ToString().ToLowerInvariant());
+        await ApplyLargeView();
     }
 
     private async Task ToggleTheme()
@@ -48,5 +130,68 @@
             await JS.InvokeVoidAsync("document.body.classList.add", "dark");
         else
             await JS.InvokeVoidAsync("document.body.classList.remove", "dark");
+    }
+
+    private async Task ApplyLargeView()
+    {
+        if (IsLargeView)
+            await JS.InvokeVoidAsync("document.body.classList.add", "large-view");
+        else
+            await JS.InvokeVoidAsync("document.body.classList.remove", "large-view");
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        CurrentPath = GetCurrentPath();
+        ShouldScrollToPlayer = IsPlayerVisible;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void OnPlayerStateChanged()
+    {
+        IsCurrentFavorite = false;
+        ShouldScrollToPlayer = PlayerState.CurrentVideo is not null;
+        _ = InvokeAsync(RefreshFavoriteStateAsync);
+    }
+
+    private void OnFavoritesChanged()
+    {
+        _ = InvokeAsync(RefreshFavoriteStateAsync);
+    }
+
+    private async Task RefreshFavoriteStateAsync()
+    {
+        IsCurrentFavorite = PlayerState.CurrentVideo is not null &&
+            await FavoritesService.ContainsAsync(PlayerState.CurrentVideo.VideoId);
+        StateHasChanged();
+    }
+
+    private async Task ToggleCurrentFavoriteAsync()
+    {
+        if (PlayerState.CurrentVideo is null)
+            return;
+
+        if (IsCurrentFavorite)
+            await FavoritesService.RemoveAsync(PlayerState.CurrentVideo.VideoId);
+        else
+            await FavoritesService.AddAsync(PlayerState.CurrentVideo);
+    }
+
+    private string GetCurrentPath()
+    {
+        return PlayerStateService.NormalizePath(
+            Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0]);
+    }
+
+    private void ReturnToVideo()
+    {
+        Navigation.NavigateTo(PlayerState.OriginPath);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        PlayerState.Changed -= OnPlayerStateChanged;
+        FavoritesService.Changed -= OnFavoritesChanged;
     }
 }
