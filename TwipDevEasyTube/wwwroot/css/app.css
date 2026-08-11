@@ -128,10 +128,16 @@ body.dark {
 }
 
 .app-container > main {
-    flex: 1;
+    display: contents;
+}
+
+.app-container > main > * {
+    order: 3;
 }
 
 .app-footer {
+    order: 4;
+    margin-top: auto;
     padding: 22px 16px 18px;
     text-align: center;
     font-size: var(--font-small);
@@ -197,6 +203,7 @@ body.dark {
 
 /* ===== Suche ===== */
 .search-header {
+    order: 1;
     background: var(--surface);
     padding: 24px 20px;
     box-shadow: var(--shadow);
@@ -515,6 +522,7 @@ body.dark {
 
 /* ===== Player ===== */
 .persistent-player {
+    order: 2;
     background: var(--bg);
     scroll-margin-top: 76px;
 }
@@ -592,6 +600,7 @@ body.dark {
 }
 
 .background-player-notice {
+    order: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -619,6 +628,7 @@ body.dark {
 /* ===== Verlauf / Meine Videos Header ===== */
 .history-header,
 .section-header {
+    order: 1;
     background: var(--surface);
     padding: 20px 18px;
     display: flex;
