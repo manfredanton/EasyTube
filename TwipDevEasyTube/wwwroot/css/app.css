@@ -296,13 +296,13 @@ body.dark {
 
 .autocomplete-dropdown {
     position: absolute;
-    top: 100%;
+    top: calc(100% + 6px);
     left: 0;
     right: 0;
     background: var(--surface);
     border: 3px solid var(--accent);
-    border-top: none;
-    border-radius: 0 0 14px 14px;
+    border-radius: 14px;
+    overflow: hidden;
     z-index: 100;
     box-shadow: var(--shadow);
 }

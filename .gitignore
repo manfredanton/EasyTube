@@ -2,4 +2,6 @@
 /publish
 /TwipDevEasyTube/bin
 /TwipDevEasyTube/obj
+/TwipDevEasyTube/server.log
+/.claude/
 deploy.ps1
