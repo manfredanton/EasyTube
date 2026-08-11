@@ -140,6 +140,21 @@ html, body {
     margin: 0 auto;
     min-height: 100vh;
     background: var(--bg-light);
+    display: flex;
+    flex-direction: column;
+}
+
+    /* Schiebt die Fusszeile ans untere Ende, auch bei wenig Inhalt */
+    .app-container > main {
+        flex: 1;
+    }
+
+.app-footer {
+    padding: 18px 16px 14px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-secondary);
+    opacity: 0.7;
 }
 
 /* ===== Tab-Navigation ===== */
