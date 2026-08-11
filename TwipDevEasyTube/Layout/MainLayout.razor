@@ -1,5 +1,8 @@
 ﻿@inherits LayoutComponentBase
 @inject IJSRuntime JS
+@inject PlayerStateService PlayerState
+@inject NavigationManager Navigation
+@implements IDisposable
 
 <div class="app-container">
     <nav class="tab-bar" aria-label="Hauptnavigation">
@@ -23,6 +26,40 @@
         </button>
     </div>
 
+    @if (PlayerState.CurrentVideo is not null)
+    {
+        <section class="persistent-player @(IsPlayerVisible ? null : "persistent-player-hidden")"
+                 aria-hidden="@(!IsPlayerVisible)">
+            <div class="player-header">
+                <button class="btn-back" @onclick="PlayerState.Stop">■ Video beenden</button>
+                <span class="player-title">@PlayerState.CurrentVideo.Title</span>
+            </div>
+
+            <iframe @key="PlayerState.CurrentVideo.VideoId"
+                    class="player-embed"
+                    title="@($"Video: {PlayerState.CurrentVideo.Title}")"
+                    src="@PlayerState.CurrentVideo.EmbedUrl"
+                    tabindex="@(IsPlayerVisible ? "0" : "-1")"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                    allowfullscreen>
+            </iframe>
+
+            <div class="player-info">
+                <div class="player-video-title">@PlayerState.CurrentVideo.Title</div>
+                <div class="player-channel">@PlayerState.CurrentVideo.ChannelName</div>
+            </div>
+        </section>
+
+        @if (!IsPlayerVisible)
+        {
+            <div class="background-player-notice" role="status">
+                <span>▶ Das Video läuft im Hintergrund weiter.</span>
+                <button @onclick="ReturnToVideo">Zum Video</button>
+                <button @onclick="PlayerState.Stop">Beenden</button>
+            </div>
+        }
+    }
+
     <main>
         @Body
     </main>
@@ -33,6 +70,17 @@
 @code {
     private bool IsDark { get; set; }
     private bool IsLargeView { get; set; }
+    private string CurrentPath { get; set; } = string.Empty;
+    private bool IsPlayerVisible =>
+        PlayerState.CurrentVideo is not null &&
+        CurrentPath == PlayerState.OriginPath;
+
+    protected override void OnInitialized()
+    {
+        CurrentPath = GetCurrentPath();
+        Navigation.LocationChanged += OnLocationChanged;
+        PlayerState.Changed += OnPlayerStateChanged;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -76,5 +124,33 @@
             await JS.InvokeVoidAsync("document.body.classList.add", "large-view");
         else
             await JS.InvokeVoidAsync("document.body.classList.remove", "large-view");
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        CurrentPath = GetCurrentPath();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void OnPlayerStateChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private string GetCurrentPath()
+    {
+        return PlayerStateService.NormalizePath(
+            Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0]);
+    }
+
+    private void ReturnToVideo()
+    {
+        Navigation.NavigateTo(PlayerState.OriginPath);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        PlayerState.Changed -= OnPlayerStateChanged;
     }
 }

@@ -2,32 +2,13 @@
 @inject IHistoryService HistoryService
 @inject SearchHistoryService SearchHistory;
 @inject IJSRuntime JS;
+@inject PlayerStateService PlayerState
+@inject NavigationManager Navigation
 @implements IDisposable
 
 <PageTitle>Verlauf – EasyTube</PageTitle>
 
-@if (CurrentVideo is not null)
-{
-    <div class="player-header">
-        <button class="btn-back" @onclick="ClosePlayer">← Zurück zum Verlauf</button>
-        <span class="player-title">@CurrentVideo.Title</span>
-    </div>
-
-    <iframe class="player-embed"
-            title="@($"Video: {CurrentVideo.Title}")"
-            src="@CurrentVideo.EmbedUrl"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-            allowfullscreen>
-    </iframe>
-
-    <div class="player-info">
-        <div class="player-video-title">@CurrentVideo.Title</div>
-        <div class="player-channel">@CurrentVideo.ChannelName</div>
-    </div>
-}
-else
-{
-    <div class="history-header">
+<div class="history-header">
         <button class="btn-display" @onclick="OpenSearchHistory">🧹 Suchbegriffe</button>
         <h1 class="history-title">Zuletzt angesehen</h1>
         @if (Entries.Count > 0)
@@ -137,7 +118,6 @@ else
             }
         </div>
     }
-}
 
 @if (!string.IsNullOrEmpty(StatusMessage))
 {
@@ -153,7 +133,6 @@ else
 @code {
     private List<WatchHistoryEntry> Entries { get; set; } = [];
     private bool IsLoading { get; set; } = true;
-    private VideoItem? CurrentVideo { get; set; }
 
     private bool ShowSearchHistoryDialog { get; set; }
     private List<string> SearchTerms { get; set; } = [];
@@ -193,23 +172,19 @@ else
 
     private async Task OpenVideo(WatchHistoryEntry entry)
     {
-        CurrentVideo = new VideoItem
+        var video = new VideoItem
         {
             VideoId = entry.VideoId,
             Title = entry.Title,
             ChannelName = entry.ChannelName,
             ThumbnailUrl = entry.ThumbnailUrl
         };
+        PlayerState.Play(video, Navigation.ToBaseRelativePath(Navigation.Uri));
 
         // Eintrag neu speichern damit er oben erscheint
-        var updated = WatchHistoryEntry.FromVideoItem(CurrentVideo);
+        var updated = WatchHistoryEntry.FromVideoItem(video);
         await HistoryService.AddAsync(updated);
         await LoadAsync();
-    }
-
-    private void ClosePlayer()
-    {
-        CurrentVideo = null;
     }
 
     private async Task OnFilterKeyDown(KeyboardEventArgs e)

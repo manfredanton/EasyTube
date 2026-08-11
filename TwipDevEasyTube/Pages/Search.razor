@@ -6,34 +6,12 @@
 @inject SearchStateService SearchState
 @inject SearchHistoryService SearchHistory
 @inject IJSRuntime JS
+@inject PlayerStateService PlayerState
+@inject NavigationManager Navigation
 
 <PageTitle>Videos suchen – EasyTube</PageTitle>
 
-@if (CurrentVideo is not null)
-{
-    <div class="player-header">
-        <button class="btn-back" @onclick="ClosePlayer">← Zurück zur Suche</button>
-        <span class="player-title">@CurrentVideo.Title</span>
-    </div>
-
-    <iframe class="player-embed"
-            title="@($"Video: {CurrentVideo.Title}")"
-            src="@CurrentVideo.EmbedUrl"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-            allowfullscreen>
-    </iframe>
-
-    <div class="player-info">
-        <div class="player-video-title">@CurrentVideo.Title</div>
-        <div class="player-channel">@CurrentVideo.ChannelName</div>
-        <button class="btn-secondary" @onclick="() => ToggleFavoriteAsync(CurrentVideo)">
-            @(FavoriteIds.Contains(CurrentVideo.VideoId) ? "★ Nicht mehr merken" : "☆ Video merken")
-        </button>
-    </div>
-}
-else
-{
-    <div class="search-header">
+<div class="search-header">
         <h1 class="app-title">🎬 EasyTube</h1>
 
         <div class="search-row">
@@ -140,7 +118,6 @@ else
             }
         </div>
     }
-}
 
 @if (!string.IsNullOrEmpty(StatusMessage))
 {
@@ -157,7 +134,6 @@ else
     private bool HasNoResults { get; set; }
     private string ErrorMessage { get; set; } = string.Empty;
     private List<VideoItem> Results { get; set; } = [];
-    private VideoItem? CurrentVideo { get; set; }
     private List<string> Suggestions { get; set; } = [];
     private HashSet<string> FavoriteIds { get; set; } = [];
     private int VisibleResultCount { get; set; } = ResultsPerPage;
@@ -290,7 +266,7 @@ else
 
     private async Task OpenVideo(VideoItem video)
     {
-        CurrentVideo = video;
+        PlayerState.Play(video, Navigation.ToBaseRelativePath(Navigation.Uri));
         var entry = WatchHistoryEntry.FromVideoItem(video);
         await HistoryService.AddAsync(entry);
     }
@@ -344,8 +320,4 @@ else
         Suggestions = [];
     }
 
-    private void ClosePlayer()
-    {
-        CurrentVideo = null;
-    }
 }

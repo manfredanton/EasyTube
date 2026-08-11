@@ -1,32 +1,13 @@
 @page "/favoriten"
 @inject IFavoritesService FavoritesService
 @inject IHistoryService HistoryService
+@inject PlayerStateService PlayerState
+@inject NavigationManager Navigation
 @implements IDisposable
 
 <PageTitle>Meine Videos – EasyTube</PageTitle>
 
-@if (CurrentVideo is not null)
-{
-    <div class="player-header">
-        <button class="btn-back" @onclick="ClosePlayer">← Zurück zu meinen Videos</button>
-        <span class="player-title">@CurrentVideo.Title</span>
-    </div>
-
-    <iframe class="player-embed"
-            title="@($"Video: {CurrentVideo.Title}")"
-            src="@CurrentVideo.EmbedUrl"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-            allowfullscreen>
-    </iframe>
-
-    <div class="player-info">
-        <div class="player-video-title">@CurrentVideo.Title</div>
-        <div class="player-channel">@CurrentVideo.ChannelName</div>
-    </div>
-}
-else
-{
-    <header class="section-header">
+<header class="section-header">
         <h1 class="history-title">⭐ Meine Videos</h1>
         <p>Hier findest du deine gemerkten Lieblingsvideos.</p>
     </header>
@@ -66,7 +47,6 @@ else
             }
         </div>
     }
-}
 
 @if (!string.IsNullOrEmpty(StatusMessage))
 {
@@ -81,7 +61,6 @@ else
 
 @code {
     private List<VideoItem> Videos { get; set; } = [];
-    private VideoItem? CurrentVideo { get; set; }
     private VideoItem? LastRemoved { get; set; }
     private bool IsLoading { get; set; } = true;
     private string StatusMessage { get; set; } = string.Empty;
@@ -99,13 +78,8 @@ else
 
     private async Task OpenVideo(VideoItem video)
     {
-        CurrentVideo = video;
+        PlayerState.Play(video, Navigation.ToBaseRelativePath(Navigation.Uri));
         await HistoryService.AddAsync(WatchHistoryEntry.FromVideoItem(video));
-    }
-
-    private void ClosePlayer()
-    {
-        CurrentVideo = null;
     }
 
     private async Task RemoveAsync(VideoItem video)
