@@ -1,0 +1,251 @@
+﻿@page "/verlauf"
+@inject IHistoryService HistoryService
+@inject SearchHistoryService SearchHistory;
+@inject IJSRuntime JS;
+
+@if (CurrentVideo is not null)
+{
+    <!-- Player Ansicht -->
+    <div class="player-header">
+        <button class="btn-back" @onclick="ClosePlayer">← Zurück</button>
+        <span class="player-title">@((MarkupString)CurrentVideo.Title)</span>
+    </div>
+
+    <iframe class="player-embed"
+            src="@CurrentVideo.EmbedUrl"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            allowfullscreen
+            webkit-playsinline
+            playsinline>
+    </iframe>
+
+    <div class="player-info">
+        <div class="player-video-title">@((MarkupString)CurrentVideo.Title)</div>
+        <div class="player-channel">@((MarkupString)CurrentVideo.ChannelName)</div>
+    </div>
+}
+else
+{
+    <div class="history-header">
+        <button class="btn-theme" @onclick="OpenSearchHistory" title="Suchverlauf">⚙️</button>
+        <span class="history-title">Zuletzt angesehen</span>
+        @if (Entries.Count > 0)
+        {
+            <button class="btn-clear" @onclick="ClearAllAsync">Alles löschen</button>
+        }
+    </div>
+
+    @if (Entries.Count > 0)
+    {
+        <div style="padding: 10px 16px; background: var(--bg-white);">
+            <div class="autocomplete-wrapper">
+                <input class="search-input"
+                       type="search"
+                       placeholder="Im Verlauf suchen..."
+                       value="@FilterText"
+                       @oninput="OnFilterInput"
+                       @onkeydown="OnFilterKeyDown"
+                       autocomplete="off"
+                       style="width: 100%; height: 64px; font-size: 28px;" />
+
+                @if (!string.IsNullOrEmpty(FilterText))
+                {
+                    <button class="input-filterclear" @onclick="ClearFilterSearch">✕</button>
+                }
+            </div>
+        </div>
+    }
+    @if (ShowConfirmDialog)
+    {
+        <div class="dialog-overlay">
+            <div class="dialog-box">
+                <div class="dialog-icon">🗑️</div>
+                <div class="dialog-title">Verlauf löschen</div>
+                <div class="dialog-message">Möchtest du deinen gesamten Verlauf löschen?</div>
+                <div class="dialog-buttons">
+                    <button class="btn-confirm" @onclick="ConfirmClear">Ja, löschen</button>
+                    <button class="btn-cancel" @onclick="() => ShowConfirmDialog = false">Abbrechen</button>
+                </div>
+            </div>
+        </div>
+    }
+    @if (ShowSearchHistoryDialog)
+    {
+        <div class="dialog-overlay">
+            <div class="dialog-box dialog-search-history">
+                <div class="dialog-icon">⚙️</div>
+                <div class="dialog-title">Suchverlauf bereinigen</div>
+                @if (SearchTerms.Count == 0)
+                {
+                    <div class="dialog-message">Noch keine Suchbegriffe gespeichert.</div>
+                }
+                else
+                {
+                    <div class="dialog-search-history-list">
+                        @foreach (var term in SearchTerms)
+                        {
+                            <div class="dialog-search-history-item">
+                                <span>@term</span>
+                                <button class="btn-delete" @onclick="() => DeleteSearchTermAsync(term)">✕</button>
+                            </div>
+                        }
+                    </div>
+                }
+                <div class="dialog-search-history-buttons">
+                    @if (SearchTerms.Count > 0)
+                    {
+                        <button class="btn-confirm" @onclick="ClearSearchHistoryAsync">Alle löschen</button>
+                    }
+                    <button class="btn-cancel" @onclick="() => ShowSearchHistoryDialog = false">Schließen</button>
+                </div>
+            </div>
+        </div>
+    }
+    @if (IsLoading)
+    {
+        <div class="spinner-box">
+            <div class="spinner"></div>
+            <span style="color: var(--text-secondary)">Wird geladen...</span>
+        </div>
+    }
+    else if (Entries.Count == 0)
+    {
+        <div class="state-box">
+            <div class="state-icon">🕐</div>
+            <div class="state-title">Noch nichts angesehen.</div>
+            <div class="state-subtitle">Videos die du abgespielt hast, erscheinen hier.</div>
+        </div>
+    }
+    else
+    {
+        <div class="video-list">
+            @foreach (var entry in FilteredEntries)
+            {
+                <div class="video-card">
+                    <div class="video-card-row">
+                        <img class="video-thumbnail"
+                             src="@entry.ThumbnailUrl"
+                             alt="@entry.Title"
+                             @onclick="() => OpenVideo(entry)" />
+
+                        <div class="video-info" @onclick="() => OpenVideo(entry)" style="cursor:pointer; flex:1">
+                            <div class="video-title">@((MarkupString)entry.Title)</div>
+                            <div class="video-channel">@((MarkupString)entry.ChannelName)</div>
+                            <div class="video-date">@entry.WatchedAtFormatted</div>
+                        </div>
+
+                        <button class="btn-delete" @onclick="() => DeleteEntryAsync(entry)">✕</button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private List<WatchHistoryEntry> Entries { get; set; } = [];
+    private bool IsLoading { get; set; } = true;
+    private VideoItem? CurrentVideo { get; set; }
+
+    private bool ShowSearchHistoryDialog { get; set; }
+    private List<string> SearchTerms { get; set; } = [];
+
+    private string FilterText { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private List<WatchHistoryEntry> FilteredEntries =>
+    FilterText.Length >= 2
+        ? Entries.Where(e =>
+            e.Title.Contains(FilterText, StringComparison.OrdinalIgnoreCase) ||
+            e.ChannelName.Contains(FilterText, StringComparison.OrdinalIgnoreCase))
+          .ToList()
+        : Entries;
+
+    private void OnFilterInput(ChangeEventArgs e)
+    {
+        FilterText = e.Value?.ToString() ?? string.Empty;
+    }
+
+    private async Task LoadAsync()
+    {
+        IsLoading = true;
+        FilterText = string.Empty;
+        var entries = await HistoryService.GetAllAsync();
+        Entries = entries.ToList();
+        IsLoading = false;
+    }
+
+    private async Task OpenVideo(WatchHistoryEntry entry)
+    {
+        CurrentVideo = new VideoItem
+        {
+            VideoId = entry.VideoId,
+            Title = entry.Title,
+            ChannelName = entry.ChannelName,
+            ThumbnailUrl = entry.ThumbnailUrl
+        };
+
+        // Eintrag neu speichern damit er oben erscheint
+        var updated = WatchHistoryEntry.FromVideoItem(CurrentVideo);
+        await HistoryService.AddAsync(updated);
+        await LoadAsync();
+    }
+
+    private void ClosePlayer()
+    {
+        CurrentVideo = null;
+    }
+
+    private async Task OnFilterKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await JS.InvokeVoidAsync("document.activeElement.blur");
+    }
+
+    private async Task DeleteEntryAsync(WatchHistoryEntry entry)
+    {
+        await HistoryService.RemoveAsync(entry.VideoId);
+        await LoadAsync();
+    }
+
+    private bool ShowConfirmDialog { get; set; }
+
+    private void ClearAllAsync()
+    {
+        ShowConfirmDialog = true;
+    }
+
+    private async Task ConfirmClear()
+    {
+        ShowConfirmDialog = false;
+        await HistoryService.ClearAllAsync();
+        await LoadAsync();
+    }
+
+    private async Task OpenSearchHistory()
+    {
+        SearchTerms = await SearchHistory.GetAllAsync();
+        ShowSearchHistoryDialog = true;
+    }
+
+    private async Task DeleteSearchTermAsync(string term)
+    {
+        await SearchHistory.RemoveAsync(term);
+        SearchTerms = await SearchHistory.GetAllAsync();
+    }
+
+    private async Task ClearSearchHistoryAsync()
+    {
+        await SearchHistory.ClearAllAsync();
+        SearchTerms = [];
+    }
+
+    private void ClearFilterSearch()
+    {
+        FilterText = string.Empty;
+    }
+}

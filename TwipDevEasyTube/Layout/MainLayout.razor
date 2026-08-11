@@ -1,0 +1,50 @@
+﻿@inherits LayoutComponentBase
+@inject IJSRuntime JS
+
+<div class="app-container">
+    <nav class="tab-bar">
+        <NavLink href="" Match="NavLinkMatch.All" ActiveClass="active">
+            🔍 Suche
+        </NavLink>
+        <button class="btn-theme" @onclick="ToggleTheme" title="Dark/Light Mode">
+            @(IsDark ? "☀️" : "🌙")
+        </button>
+        <NavLink href="verlauf" ActiveClass="active">
+            🕐 Verlauf
+        </NavLink>        
+    </nav>
+
+    <main>
+        @Body
+    </main>
+</div>
+
+@code {
+    private bool IsDark { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "easytube_theme");
+            IsDark = stored == "dark";
+            await ApplyTheme();
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleTheme()
+    {
+        IsDark = !IsDark;
+        await JS.InvokeVoidAsync("localStorage.setItem", "easytube_theme", IsDark ? "dark" : "light");
+        await ApplyTheme();
+    }
+
+    private async Task ApplyTheme()
+    {
+        if (IsDark)
+            await JS.InvokeVoidAsync("document.body.classList.add", "dark");
+        else
+            await JS.InvokeVoidAsync("document.body.classList.remove", "dark");
+    }
+}

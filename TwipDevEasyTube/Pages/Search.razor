@@ -1,0 +1,246 @@
+﻿@page "/"
+@inject IYouTubeService YouTubeService
+@inject IRequestCounterService RequestCounter
+@inject IHistoryService HistoryService
+@inject SearchStateService SearchState
+@inject SearchHistoryService SearchHistory
+@inject IJSRuntime JS
+
+@if (CurrentVideo is not null)
+{
+    <!-- Player Ansicht -->
+    <div class="player-header">
+        <button class="btn-back" @onclick="ClosePlayer">← Zurück</button>
+        <span class="player-title">@((MarkupString)CurrentVideo.Title)</span>
+    </div>
+
+    <iframe class="player-embed"
+            src="@CurrentVideo.EmbedUrl"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            allowfullscreen
+            webkit-playsinline
+            playsinline>
+    </iframe>
+
+    <div class="player-info">
+        <div class="player-video-title">@((MarkupString)CurrentVideo.Title)</div>
+        <div class="player-channel">@((MarkupString)CurrentVideo.ChannelName)</div>
+    </div>
+}
+else
+{
+    <!-- Suche Ansicht -->
+    <div class="search-header">
+        <div class="app-title">🎬 EasyTube</div>
+
+        <div class="search-row">
+            <div class="autocomplete-wrapper">
+                <input class="search-input"
+                       type="search"
+                       placeholder="Was möchtest du ansehen?"
+                       value="@SearchText"
+                       @onkeydown="OnKeyDown"
+                       @oninput="OnInput"
+                       autocomplete="off" />
+
+                @if (!string.IsNullOrEmpty(SearchText))
+                {
+                    <button class="input-clear" @onclick="ClearSearch">✕</button>
+                }                       
+                @if (Suggestions.Count > 0)
+                {
+                    <div class="autocomplete-dropdown">
+                        @foreach (var suggestion in Suggestions)
+                        {
+                            <div class="autocomplete-item" @onclick="() => SelectSuggestion(suggestion)">
+                                🕐 @suggestion
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <button class="btn-primary"
+                    @onclick="SearchAsync"
+                    disabled="@(IsLoading || string.IsNullOrWhiteSpace(SearchText))">
+                Suchen
+            </button>
+        </div>
+
+        <div class="request-counter" style="color: @CounterColor">
+            @CounterText
+        </div>
+    </div>
+
+    @if (IsLoading)
+    {
+        <div class="spinner-box">
+            <div class="spinner"></div>
+            <span style="color: var(--text-secondary)">Wird gesucht...</span>
+        </div>
+    }
+    else if (HasError)
+    {
+        <div class="state-box">
+            <div class="state-icon">⚠️</div>
+            <div class="state-title">@ErrorMessage</div>
+        </div>
+    }
+    else if (HasNoResults)
+    {
+        <div class="state-box">
+            <div class="state-icon">🔍</div>
+            <div class="state-title">Nichts gefunden.</div>
+            <div class="state-subtitle">Versuche einen anderen Suchbegriff.</div>
+        </div>
+    }
+    else
+    {
+        <div class="video-list">
+            @foreach (var video in Results)
+            {
+                <div class="video-card" @onclick="() => OpenVideo(video)">
+                    <img class="video-thumbnail" src="@video.ThumbnailUrl" alt="@video.Title" />
+                    <div class="video-info">
+                        <div class="video-title">@((MarkupString)video.Title)</div>
+                        <div class="video-channel">@((MarkupString)video.ChannelName)</div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private string SearchText { get; set; } = string.Empty;
+    private bool IsLoading { get; set; }
+    private bool HasError { get; set; }
+    private bool HasNoResults { get; set; }
+    private string ErrorMessage { get; set; } = string.Empty;
+    private List<VideoItem> Results { get; set; } = [];
+    private VideoItem? CurrentVideo { get; set; }
+    private List<string> Suggestions { get; set; } = [];
+
+    private string CounterText =>
+        $"{RequestCounter.TodayCount} von {RequestCounter.DailyLimit} Suchen heute verwendet";
+
+    private string CounterColor => RequestCounter.TodayCount switch
+    {
+        var n when n >= RequestCounter.DailyLimit * 0.9 => "#C62828",
+        var n when n >= RequestCounter.DailyLimit * 0.7 => "#E65100",
+        _ => "#2E7D32"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RequestCounter.LoadAsync();
+
+        // Letzte Suche wiederherstellen
+        if (SearchState.LastResults.Count > 0)
+        {
+            SearchText = SearchState.LastSearchText;
+            Results = SearchState.LastResults;
+        }
+    }
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        SearchText = e.Value?.ToString() ?? string.Empty;
+        if (SearchText.Length >= 2)
+            Suggestions = await SearchHistory.GetSuggestionsAsync(SearchText);
+        else
+            Suggestions = [];
+    }
+
+    private async Task SelectSuggestion(string suggestion)
+    {
+        SearchText = suggestion;
+        Suggestions = [];
+        await JS.InvokeVoidAsync("document.activeElement.blur");
+        await SearchAsync();
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            Suggestions = [];
+            await JS.InvokeVoidAsync("document.activeElement.blur");
+            await SearchAsync();
+        }
+        else if (e.Key == "Escape")
+        {
+            Suggestions = [];
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SearchText) || IsLoading)
+            return;
+
+        IsLoading = true;
+        HasError = false;
+        HasNoResults = false;
+        ErrorMessage = string.Empty;
+        Results = [];
+        Suggestions = [];
+
+        try
+        {
+            var results = await YouTubeService.SearchAsync(SearchText);
+            Results = results.ToList();
+            HasNoResults = Results.Count == 0;
+
+            if (Results.Count > 0)
+            {
+                await RequestCounter.IncrementAsync();
+                await SearchHistory.AddAsync(SearchText);
+                SearchState.LastSearchText = SearchText;
+                SearchState.LastResults = Results;
+            }
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+        {
+            HasError = true;
+            ErrorMessage = "Tageslimit erreicht. Bitte morgen erneut versuchen.";
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            HasError = true;
+            ErrorMessage = "API-Zugriff verweigert. Bitte den API Key prüfen.";
+        }
+        catch (HttpRequestException)
+        {
+            HasError = true;
+            ErrorMessage = "Keine Internetverbindung. Bitte WLAN prüfen.";
+        }
+        catch
+        {
+            HasError = true;
+            ErrorMessage = "Ein Fehler ist aufgetreten. Bitte erneut versuchen.";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task OpenVideo(VideoItem video)
+    {
+        CurrentVideo = video;
+        var entry = WatchHistoryEntry.FromVideoItem(video);
+        await HistoryService.AddAsync(entry);
+    }
+
+    private void ClearSearch()
+    {
+        SearchText = string.Empty;
+        Suggestions = [];
+    }
+
+    private void ClosePlayer()
+    {
+        CurrentVideo = null;
+    }
+}
