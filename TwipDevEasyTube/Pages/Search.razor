@@ -13,6 +13,7 @@
 
 <div class="search-header">
         <h1 class="app-title">🎬 EasyTube</h1>
+    <p class="app-subtitle">Einfach Videos schauen</p>
 
         <div class="search-row">
             <div class="autocomplete-wrapper">
@@ -81,6 +82,21 @@
             <div class="state-subtitle">Versuche einen anderen Suchbegriff.</div>
         </div>
     }
+    else if (Results.Count == 0)
+    {
+        <div class="category-section">
+            <h2 class="category-title">Beliebte Themen</h2>
+            <p class="category-subtitle">Tippe auf ein Thema, um passende Videos zu finden.</p>
+            <div class="category-grid">
+                @foreach (var category in Categories)
+                {
+                    <button class="category-card" @onclick="() => SearchCategoryAsync(category)">
+                        @category
+                    </button>
+                }
+            </div>
+        </div>
+    }
     else
     {
         <div class="video-list">
@@ -118,6 +134,16 @@
 
 @code {
     private const int ResultsPerPage = 12;
+    private static readonly string[] Categories =
+    [
+        "🎵 Musik",
+        "📰 Nachrichten",
+        "🐾 Tiere",
+        "🍳 Kochen",
+        "✈️ Reisen",
+        "⚽ Sport"
+    ];
+
     private string SearchText { get; set; } = string.Empty;
     private bool IsLoading { get; set; }
     private bool HasError { get; set; }
@@ -264,6 +290,14 @@
             FavoriteIds.Add(video.VideoId);
             StatusMessage = "Video wurde unter „Meine Videos“ gespeichert.";
         }
+    }
+
+    private async Task SearchCategoryAsync(string category)
+    {
+        SearchText = category[(category.IndexOf(' ') + 1)..];
+        Suggestions = [];
+        await JS.BlurActiveElementAsync();
+        await SearchAsync();
     }
 
     private void ShowMoreResults()

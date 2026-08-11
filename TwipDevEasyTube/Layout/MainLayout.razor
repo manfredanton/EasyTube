@@ -8,13 +8,10 @@
 <div class="app-container">
     <nav class="tab-bar" aria-label="Hauptnavigation">
         <NavLink href="" Match="NavLinkMatch.All" ActiveClass="active">
-            🔍 Suche
+            🔍 Suchen
         </NavLink>
         <NavLink href="favoriten" ActiveClass="active">
             ⭐ Meine Videos
-        </NavLink>
-        <NavLink href="verlauf" ActiveClass="active">
-            🕐 Verlauf
         </NavLink>
     </nav>
 
@@ -33,7 +30,7 @@
                  class="persistent-player @(IsPlayerVisible ? null : "persistent-player-hidden")"
                  aria-hidden="@(!IsPlayerVisible)">
             <div class="player-header">
-                <button class="btn-back" @onclick="PlayerState.Stop">■ Video beenden</button>
+                <button class="btn-back" @onclick="PlayerState.Stop">← Zurück</button>
                 <span class="player-title">@PlayerState.CurrentVideo.Title</span>
             </div>
 
