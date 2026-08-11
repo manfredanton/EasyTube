@@ -8,6 +8,6 @@
 		public string ThumbnailUrl { get; set; } = string.Empty;
 
 		public string WatchUrl => $"https://www.youtube.com/watch?v={VideoId}";
-		public string EmbedUrl => $"https://www.youtube.com/embed/{VideoId}?autoplay=0&rel=0&modestbranding=1";
+		public string EmbedUrl => $"https://www.youtube.com/embed/{VideoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1";
 	}
 }

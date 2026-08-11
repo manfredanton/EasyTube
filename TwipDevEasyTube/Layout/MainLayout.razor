@@ -29,7 +29,8 @@
 
     @if (PlayerState.CurrentVideo is not null)
     {
-        <section class="persistent-player @(IsPlayerVisible ? null : "persistent-player-hidden")"
+        <section id="persistent-player"
+                 class="persistent-player @(IsPlayerVisible ? null : "persistent-player-hidden")"
                  aria-hidden="@(!IsPlayerVisible)">
             <div class="player-header">
                 <button class="btn-back" @onclick="PlayerState.Stop">■ Video beenden</button>
@@ -75,6 +76,7 @@
     private bool IsDark { get; set; }
     private bool IsLargeView { get; set; }
     private bool IsCurrentFavorite { get; set; }
+    private bool ShouldScrollToPlayer { get; set; }
     private string CurrentPath { get; set; } = string.Empty;
     private bool IsPlayerVisible =>
         PlayerState.CurrentVideo is not null &&
@@ -99,6 +101,12 @@
             await ApplyTheme();
             await ApplyLargeView();
             StateHasChanged();
+        }
+
+        if (ShouldScrollToPlayer && IsPlayerVisible)
+        {
+            ShouldScrollToPlayer = false;
+            await JS.InvokeVoidAsync("easyTube.scrollToElement", "persistent-player");
         }
     }
 
@@ -135,12 +143,14 @@
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         CurrentPath = GetCurrentPath();
+        ShouldScrollToPlayer = IsPlayerVisible;
         _ = InvokeAsync(StateHasChanged);
     }
 
     private void OnPlayerStateChanged()
     {
         IsCurrentFavorite = false;
+        ShouldScrollToPlayer = PlayerState.CurrentVideo is not null;
         _ = InvokeAsync(RefreshFavoriteStateAsync);
     }
 

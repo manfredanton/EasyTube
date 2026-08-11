@@ -433,6 +433,7 @@ html, body {
 
 .persistent-player {
     background: var(--bg-light);
+    scroll-margin-top: 76px;
 }
 
 .persistent-player-hidden {
